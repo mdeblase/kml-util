@@ -2,7 +2,9 @@ package com.mdeblase.kml;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import de.micromata.opengis.kml.v_2_2_0.*;
 
@@ -33,22 +35,40 @@ public class KMLParseToCSV {
             writer.append("LON");
             writer.append('\n');
             Document doc = (Document)kml.getFeature();
-            Folder folder = (Folder)doc.getFeature().get(0).withName("simp_cnty_existing");
+            Folder folder = (Folder)doc.getFeature().get(0).withName("gz_2010_us_050_00_20m");
             for (int i = 0; i < folder.getFeature().size(); i++) {
                 Placemark p = (Placemark)folder.getFeature().get(i);
-                String fips = getFIPS(p);
-                double aveLat = getAvgLat(p);
-                double aveLon =getAvgLon(p);
-                String latStr = Double.toString(aveLat);
-                System.out.println(latStr);
-                String lonStr = Double.toString(aveLon);
-                System.out.println(lonStr);
-                writer.append(fips);
-                writer.append(',');
-                writer.append(latStr);
-                writer.append(',');
-                writer.append(lonStr);
-                writer.append('\n');
+                
+                //String fips = getFIPS(p);
+                if (p.getGeometry() instanceof MultiGeometry) {
+                    MultiGeometry mg = (MultiGeometry) p.getGeometry();
+                    double largestArea = 0.0;
+                    String centroid = "";
+                    for (int j = 0; j < mg.getGeometry().size(); j++) {
+                        Polygon poly = (Polygon) mg.getGeometry().get(j);
+                        double area = KMLUtil.getArea(poly);
+                        if(area > largestArea) {
+                            centroid = KMLUtil.getCentroid(area, poly);
+                            largestArea = area;
+                        }
+                        
+                    }
+                    //I only want the center of the largest Polygon to ignore counties with islands
+                    writer.append(KMLUtil.getFIPS(p));
+                    writer.append(',');
+                    writer.append(centroid);
+                    writer.append('\n');
+                    
+                } else {
+                    Polygon poly = (Polygon) p.getGeometry();
+                    double area = KMLUtil.getArea(poly);
+                    String centroid = KMLUtil.getCentroid(area, poly);
+                    writer.append(KMLUtil.getFIPS(p));
+                    writer.append(',');
+                    writer.append(centroid);
+                    writer.append('\n');
+                }
+                
                 
             }
             writer.flush();
@@ -60,45 +80,6 @@ public class KMLParseToCSV {
         }
     }
 
-    private double getAvgLon(Placemark p) {
-        Polygon poly = (Polygon)p.getGeometry();
-        Boundary outerBoundaryIs = poly.getOuterBoundaryIs();
-        LinearRing linearRing = outerBoundaryIs.getLinearRing();
-        List<Coordinate> coordinates = linearRing.getCoordinates();
-        int count = 0;
-        double lonTotal = 0;
-        for (int i = 0; i < coordinates.size() -1; i++) {
-            double lon = coordinates.get(i).getLongitude();
-            lonTotal += lon;
-            count++;
-          }
-        
-        return lonTotal/count;
-        
-    }
-
-    private double getAvgLat(Placemark p) {
-        Polygon poly = (Polygon)p.getGeometry();
-        Boundary outerBoundaryIs = poly.getOuterBoundaryIs();
-        LinearRing linearRing = outerBoundaryIs.getLinearRing();
-        List<Coordinate> coordinates = linearRing.getCoordinates();
-        int count = 0;
-        double latTotal = 0;
-        for (int i = 0; i < coordinates.size() -1; i++) {
-            double lat = coordinates.get(i).getLatitude();
-            latTotal += lat;
-            count++;
-          }
-        
-        return latTotal/count;
-    }
-
-    private String getFIPS(Placemark p) {
-        String desc = p.getDescription();
-        String[] split1 = desc.split("<br>");
-        String[] split2 = split1[0].split(" ");
-        System.out.println(split2[2]);
-        return split2[2];
-    }
+    
     
 }
